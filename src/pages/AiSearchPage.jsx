@@ -127,7 +127,7 @@ export default function AiSearchPage() {
                 label={s}
                 size="small"
                 clickable
-                onClick={() => { setQuery(s); }}
+                onClick={() => { setQuery(s); dispatch(searchLeads(s)); }}
                 sx={{
                   fontSize: 11,
                   background: '#FFFFFF',
@@ -209,7 +209,7 @@ export default function AiSearchPage() {
                   {results.map((result, i) => {
                     const rowId = result.id || result.companyName;
                     const isSelected = selectedIds.includes(rowId);
-                    const confColors = CONFIDENCE_COLORS[result.confidence] || CONFIDENCE_COLORS.MEDIUM;
+                    const confColors = CONFIDENCE_COLORS[result.confidenceScore] || CONFIDENCE_COLORS.MEDIUM;
 
                     return (
                       <TableRow
@@ -267,7 +267,7 @@ export default function AiSearchPage() {
                               fontWeight: 600,
                             }}
                           >
-                            {result.confidence || 'MEDIUM'}
+                            {result.confidenceScore || 'MEDIUM'}
                           </span>
                         </TableCell>
                         <TableCell>

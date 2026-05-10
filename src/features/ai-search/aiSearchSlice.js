@@ -8,9 +8,14 @@ export const searchLeads = createAsyncThunk(
   async (query, { rejectWithValue }) => {
     try {
       const response = await axiosInstance.post(AI_SEARCH.SEARCH, { query });
-      return response.data.data;
+      const payload = response.data?.data ?? response.data;
+      return Array.isArray(payload) ? payload : [];
     } catch (error) {
-      return rejectWithValue(error.response?.data?.message || 'AI search failed');
+      if (!error.response) {
+        return rejectWithValue('Cannot reach the server. Check that the backend is running.');
+      }
+      const msg = error.response.data?.message || error.response.data?.error || `Server error ${error.response.status}`;
+      return rejectWithValue(msg);
     }
   }
 );
@@ -21,9 +26,12 @@ export const bulkCreateLeads = createAsyncThunk(
     try {
       const response = await axiosInstance.post(AI_SEARCH.BULK_CREATE, { leads: selectedItems });
       toast.success(`${selectedItems.length} leads added successfully`);
-      return response.data.data;
+      return response.data?.data ?? response.data;
     } catch (error) {
-      return rejectWithValue(error.response?.data?.message || 'Bulk create failed');
+      if (!error.response) {
+        return rejectWithValue('Cannot reach the server. Check that the backend is running.');
+      }
+      return rejectWithValue(error.response.data?.message || 'Bulk create failed');
     }
   }
 );
