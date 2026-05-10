@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 
-const DUMMY_TOKEN = "dummy-bypass-token-nexcrm-dev";
+const DUMMY_TOKEN = "dummy-bypass-token-craviq-dev";
 
 // TODO: Replace with real Keycloak auth when ready
 export const loginThunk = createAsyncThunk(
@@ -12,11 +12,11 @@ export const loginThunk = createAsyncThunk(
       id: "usr-001",
       name: username,
       preferred_username: username,
-      role: "ADMIN",
+      role: "SUPER_ADMIN",
     };
 
-    localStorage.setItem("nexcrm_token", DUMMY_TOKEN);
-    localStorage.setItem("nexcrm_user", JSON.stringify(profile));
+    localStorage.setItem("craviq_token", DUMMY_TOKEN);
+    localStorage.setItem("craviq_user", JSON.stringify(profile));
 
     return { access_token: DUMMY_TOKEN, user: profile };
   }
@@ -25,7 +25,7 @@ export const loginThunk = createAsyncThunk(
 // ─── RESTORE USER FROM STORAGE ───────────────────────────────────────
 const storedUser = () => {
   try {
-    const u = localStorage.getItem("nexcrm_user");
+    const u = localStorage.getItem("craviq_user");
     return u ? JSON.parse(u) : null;
   } catch {
     return null;
@@ -37,16 +37,16 @@ const authSlice = createSlice({
   name: "auth",
   initialState: {
     user: storedUser(),
-    token: localStorage.getItem("nexcrm_token") || null,
-    isAuthenticated: !!localStorage.getItem("nexcrm_token"),
+    token: localStorage.getItem("craviq_token") || null,
+    isAuthenticated: !!localStorage.getItem("craviq_token"),
     loading: false,
     error: null,
   },
   reducers: {
     logout(state) {
-      localStorage.removeItem("nexcrm_token");
-      localStorage.removeItem("nexcrm_refresh_token");
-      localStorage.removeItem("nexcrm_user");
+      localStorage.removeItem("craviq_token");
+      localStorage.removeItem("craviq_refresh_token");
+      localStorage.removeItem("craviq_user");
       state.user = null;
       state.token = null;
       state.isAuthenticated = false;

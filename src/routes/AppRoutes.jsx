@@ -1,5 +1,5 @@
 import React from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { Box, Typography, Button } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 
@@ -12,6 +12,18 @@ import LeadDetailPage from "../pages/LeadDetailPage";
 import LeadFormPage from "../pages/LeadFormPage";
 import PipelinePage from "../pages/PipelinePage";
 import AiSearchPage from "../pages/AiSearchPage";
+import UsersListPage from "../pages/UsersListPage";
+import UserFormPage from "../pages/UserFormPage";
+import UserDetailPage from "../pages/UserDetailPage";
+import AuditLogsPage from "../pages/AuditLogsPage";
+import ProfilePage from "../pages/ProfilePage";
+import { usePermission } from "../hooks/usePermission";
+
+function PermittedRoute({ permission }) {
+  const { can } = usePermission();
+  if (!can(permission)) return <Navigate to="/dashboard" replace />;
+  return <Outlet />;
+}
 
 function NotFoundPage() {
   const navigate = useNavigate();
@@ -65,6 +77,21 @@ export default function AppRoutes() {
           <Route path="/leads/:id/edit" element={<LeadFormPage />} />
           <Route path="/pipeline" element={<PipelinePage />} />
           <Route path="/ai-search" element={<AiSearchPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+
+          <Route element={<PermittedRoute permission="USER_READ" />}>
+            <Route path="/users" element={<UsersListPage />} />
+            <Route path="/users/:id" element={<UserDetailPage />} />
+          </Route>
+          <Route element={<PermittedRoute permission="USER_CREATE" />}>
+            <Route path="/users/new" element={<UserFormPage />} />
+          </Route>
+          <Route element={<PermittedRoute permission="USER_UPDATE" />}>
+            <Route path="/users/:id/edit" element={<UserFormPage />} />
+          </Route>
+          <Route element={<PermittedRoute permission="AUDIT_VIEW" />}>
+            <Route path="/users/audit-logs" element={<AuditLogsPage />} />
+          </Route>
         </Route>
       </Route>
 

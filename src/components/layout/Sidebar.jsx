@@ -8,7 +8,6 @@ import {
   ListItemText,
   Typography,
   Chip,
-  Avatar,
   IconButton,
   Drawer,
   useMediaQuery,
@@ -25,9 +24,15 @@ import {
   DescriptionOutlined,
   BarChartOutlined,
   LogoutOutlined,
+  ManageAccountsOutlined,
+  HistoryOutlined,
 } from '@mui/icons-material';
 import { useAuth } from '../../hooks/useAuth';
 import { useSelector } from 'react-redux';
+import { usePermission } from '../../hooks/usePermission';
+import { useCurrentUser } from '../../hooks/useCurrentUser';
+import UserAvatar from '../common/UserAvatar';
+import RoleBadge from '../common/RoleBadge';
 
 const SIDEBAR_WIDTH = 220;
 
@@ -71,7 +76,9 @@ const NAV_SECTIONS = [
 function SidebarContent({ onClose }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
+  const { name, role } = useCurrentUser();
+  const { isSuperAdmin, isManager } = usePermission();
   const totalLeads = useSelector((state) => state.leads.pagination.totalElements);
 
   const handleNav = (path) => {
@@ -81,6 +88,7 @@ function SidebarContent({ onClose }) {
 
   const isActive = (path) => {
     if (path === '/dashboard') return location.pathname === '/dashboard';
+    if (path === '/users') return location.pathname === '/users' || (location.pathname.startsWith('/users/') && !location.pathname.startsWith('/users/audit-logs'));
     return location.pathname.startsWith(path);
   };
 
@@ -112,11 +120,11 @@ function SidebarContent({ onClose }) {
             }}
           >
             <Typography sx={{ color: '#fff', fontWeight: 700, fontSize: 13, fontFamily: 'DM Mono' }}>
-              N
+              C
             </Typography>
           </Box>
           <Typography sx={{ fontWeight: 700, fontSize: 14, color: '#1A1A18' }}>
-            NexCRM
+            Craviq CRM
           </Typography>
           <Chip
             label="v1"
@@ -206,53 +214,71 @@ function SidebarContent({ onClose }) {
             </List>
           </Box>
         ))}
+
+        {/* ADMIN section — visible to SUPER_ADMIN and SALES_MANAGER */}
+        {(isSuperAdmin || isManager) && (
+          <Box sx={{ mb: 0.5 }}>
+            <Typography sx={{ fontSize: 9, fontWeight: 600, color: '#5A5A56', letterSpacing: '0.08em', px: 2, pt: 1.5, pb: 0.5 }}>
+              ADMIN
+            </Typography>
+            <List dense disablePadding>
+              {[
+                { label: 'Users', icon: ManageAccountsOutlined, path: '/users' },
+                ...(isSuperAdmin ? [{ label: 'Audit Logs', icon: HistoryOutlined, path: '/users/audit-logs' }] : []),
+              ].map((item) => {
+                const Icon = item.icon;
+                const active = isActive(item.path);
+                return (
+                  <ListItemButton
+                    key={item.label}
+                    onClick={() => handleNav(item.path)}
+                    sx={{
+                      mx: 1, px: 1.5, py: 0.75, borderRadius: '7px', mb: 0.25,
+                      background: active ? '#1A1A18' : 'transparent',
+                      '&:hover': { background: active ? '#1A1A18' : '#F0EEE9' },
+                    }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 30 }}>
+                      <Icon sx={{ fontSize: 16, color: active ? '#FFFFFF' : '#5A5A56' }} />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={item.label}
+                      primaryTypographyProps={{
+                        fontSize: 13,
+                        fontWeight: active ? 600 : 400,
+                        color: active ? '#FFFFFF' : '#1A1A18',
+                        fontFamily: 'DM Sans',
+                      }}
+                    />
+                  </ListItemButton>
+                );
+              })}
+            </List>
+          </Box>
+        )}
       </Box>
 
       {/* User footer */}
       <Box
+        onClick={() => handleNav('/profile')}
         sx={{
-          px: 2,
-          py: 2,
-          borderTop: '1px solid #E3E1DA',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
+          px: 1.5, py: 1.5, borderTop: '1px solid #E3E1DA',
+          display: 'flex', alignItems: 'center', gap: 1,
+          cursor: 'pointer', borderRadius: '0 0 0 0',
+          '&:hover': { background: '#F7F6F3' },
         }}
       >
-        <Avatar
-          sx={{
-            width: 28,
-            height: 28,
-            fontSize: 12,
-            fontWeight: 600,
-            background: '#534AB7',
-          }}
-        >
-          {(user?.given_name || user?.preferred_username || 'U').charAt(0).toUpperCase()}
-        </Avatar>
+        <UserAvatar name={name} size="sm" />
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography
-            sx={{
-              fontSize: 12,
-              fontWeight: 600,
-              color: '#1A1A18',
-              lineHeight: 1.2,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {user?.given_name
-              ? `${user.given_name}${user.family_name ? ' ' + user.family_name : ''}`
-              : user?.preferred_username || 'User'}
+          <Typography sx={{ fontSize: 12, fontWeight: 600, color: '#1A1A18', lineHeight: 1.3,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {name || 'User'}
           </Typography>
-          <Typography sx={{ fontSize: 10, color: '#5A5A56', lineHeight: 1.2 }}>
-            {user?.realm_access?.roles?.find((r) => !r.startsWith('default-roles')) || user?.preferred_username || 'Sales Rep'}
-          </Typography>
+          <RoleBadge role={role} />
         </Box>
         <IconButton
           size="small"
-          onClick={logout}
+          onClick={(e) => { e.stopPropagation(); logout(); }}
           sx={{ color: '#5A5A56', '&:hover': { color: '#A32D2D' } }}
           title="Logout"
         >

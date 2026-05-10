@@ -71,11 +71,11 @@ export default function LoginPage() {
               }}
             >
               <Typography sx={{ color: '#fff', fontWeight: 700, fontSize: 18, fontFamily: 'DM Mono' }}>
-                N
+                C
               </Typography>
             </Box>
             <Typography variant="h6" sx={{ fontWeight: 700, color: '#1A1A18', mb: 0.5 }}>
-              NexCRM
+              Craviq CRM
             </Typography>
             <Typography variant="body2" sx={{ color: '#5A5A56' }}>
               Sign in to your account

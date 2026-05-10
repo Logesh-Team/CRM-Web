@@ -9,6 +9,9 @@ import {
   Badge,
   useMediaQuery,
   useTheme,
+  Menu,
+  MenuItem,
+  Divider,
 } from '@mui/material';
 import {
   NotificationsOutlined,
@@ -16,7 +19,13 @@ import {
   SearchOutlined,
   MenuOutlined,
   AutoAwesomeOutlined,
+  PersonOutlined,
+  LockOutlined,
+  LogoutOutlined,
 } from '@mui/icons-material';
+import { useAuth } from '../../hooks/useAuth';
+import { useCurrentUser } from '../../hooks/useCurrentUser';
+import UserAvatar from '../common/UserAvatar';
 
 const PAGE_TITLES = {
   '/dashboard': 'Dashboard',
@@ -29,13 +38,19 @@ const PAGE_TITLES = {
   '/demos': 'Demos',
   '/quotations': 'Quotations',
   '/reports': 'Reports',
+  '/users': 'User Management',
+  '/users/new': 'New User',
+  '/users/audit-logs': 'Audit Logs',
+  '/profile': 'My Profile',
 };
 
 function getPageTitle(pathname) {
   if (PAGE_TITLES[pathname]) return PAGE_TITLES[pathname];
   if (pathname.match(/^\/leads\/[^/]+\/edit$/)) return 'Edit Lead';
   if (pathname.match(/^\/leads\/[^/]+$/)) return 'Lead Details';
-  return 'NexCRM';
+  if (pathname.match(/^\/users\/[^/]+\/edit$/)) return 'Edit User';
+  if (pathname.match(/^\/users\/[^/]+$/)) return 'User Details';
+  return 'Craviq CRM';
 }
 
 export default function Topbar({ onMenuClick }) {
@@ -44,6 +59,9 @@ export default function Topbar({ onMenuClick }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [searchVal, setSearchVal] = useState('');
+  const [anchorEl, setAnchorEl] = useState(null);
+  const { logout } = useAuth();
+  const { name } = useCurrentUser();
 
   return (
     <Box
@@ -130,15 +148,43 @@ export default function Topbar({ onMenuClick }) {
           size="small"
           startIcon={<AutoAwesomeOutlined sx={{ fontSize: 14 }} />}
           onClick={() => navigate('/ai-search')}
-          sx={{
-            background: '#534AB7',
-            '&:hover': { background: '#3f37a0' },
-            fontSize: 12,
-            px: 1.5,
-          }}
+          sx={{ background: '#534AB7', '&:hover': { background: '#3f37a0' }, fontSize: 12, px: 1.5 }}
         >
           AI Search
         </Button>
+
+        {/* User avatar */}
+        <Box
+          onClick={(e) => setAnchorEl(e.currentTarget)}
+          sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+        >
+          <UserAvatar name={name} size="sm" />
+        </Box>
+        <Menu
+          anchorEl={anchorEl}
+          open={Boolean(anchorEl)}
+          onClose={() => setAnchorEl(null)}
+          transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+          anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+          PaperProps={{ sx: { mt: 0.5, minWidth: 180, borderRadius: '10px', border: '1px solid #E3E1DA', boxShadow: '0 4px 16px rgba(0,0,0,0.08)' } }}
+        >
+          <MenuItem onClick={() => { setAnchorEl(null); navigate('/profile'); }}
+            sx={{ fontSize: 13, gap: 1.5, py: 1 }}>
+            <PersonOutlined sx={{ fontSize: 16, color: '#5A5A56' }} />
+            My Profile
+          </MenuItem>
+          <MenuItem onClick={() => { setAnchorEl(null); navigate('/profile#password'); }}
+            sx={{ fontSize: 13, gap: 1.5, py: 1 }}>
+            <LockOutlined sx={{ fontSize: 16, color: '#5A5A56' }} />
+            Change Password
+          </MenuItem>
+          <Divider sx={{ my: 0.5 }} />
+          <MenuItem onClick={() => { setAnchorEl(null); logout(); }}
+            sx={{ fontSize: 13, gap: 1.5, py: 1, color: '#A32D2D' }}>
+            <LogoutOutlined sx={{ fontSize: 16 }} />
+            Logout
+          </MenuItem>
+        </Menu>
       </Box>
     </Box>
   );

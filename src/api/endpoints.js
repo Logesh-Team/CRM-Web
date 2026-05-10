@@ -20,7 +20,19 @@ export const AUTH = {
 };
 
 export const USERS = {
-  LIST: "/users",
+  LIST:             "/users",
+  CREATE:           "/users",
+  GET_BY_ID:        (id)   => `/users/${id}`,
+  UPDATE:           (id)   => `/users/${id}`,
+  DELETE:           (id)   => `/users/${id}`,
+  CHANGE_ROLE:      (id)   => `/users/${id}/role`,
+  TOGGLE_ACTIVE:    (id)   => `/users/${id}/toggle-active`,
+  ME:               "/users/me",
+  SALES_TEAM:       "/users/sales-team",
+  BY_ROLE:          (role) => `/users/by-role/${role}`,
+  CHANGE_PASSWORD:  "/users/change-password",
+  AUDIT_LOGS:       "/users/audit-logs",
+  AUDIT_BY_USER:    (id)   => `/users/audit-logs/${id}`,
 };
 
 export const DASHBOARD = {

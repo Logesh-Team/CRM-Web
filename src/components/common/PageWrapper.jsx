@@ -6,7 +6,7 @@ export default function PageWrapper({ title, breadcrumbs = [], children }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    document.title = title ? `${title} · NexCRM` : 'NexCRM';
+    document.title = title ? `${title} · Craviq CRM` : 'Craviq CRM';
   }, [title]);
 
   return (
