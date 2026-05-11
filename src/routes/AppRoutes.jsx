@@ -18,6 +18,7 @@ import UserDetailPage from "../pages/UserDetailPage";
 import AuditLogsPage from "../pages/AuditLogsPage";
 import ProfilePage from "../pages/ProfilePage";
 import { usePermission } from "../hooks/usePermission";
+import SchedulerPage from "../pages/SchedulerPage";
 
 function PermittedRoute({ permission }) {
   const { can } = usePermission();
@@ -78,6 +79,7 @@ export default function AppRoutes() {
           <Route path="/pipeline" element={<PipelinePage />} />
           <Route path="/ai-search" element={<AiSearchPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/demos" element={<SchedulerPage />} />
 
           <Route element={<PermittedRoute permission="USER_READ" />}>
             <Route path="/users" element={<UsersListPage />} />

@@ -8,6 +8,7 @@ import store from './app/store';
 import muiTheme from './theme/muiTheme';
 import App from './App';
 import './index.css';
+import 'bootstrap/dist/css/bootstrap.min.css';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
