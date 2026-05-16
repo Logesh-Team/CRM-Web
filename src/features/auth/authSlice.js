@@ -1,28 +1,56 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
+import { jwtDecode } from "jwt-decode";
+import axiosInstance from "../../api/axiosInstance";
+import { AUTH } from "../../api/endpoints";
 
-const DUMMY_TOKEN = "dummy-bypass-token-craviq-dev";
-
-// TODO: Replace with real Keycloak auth when ready
 export const loginThunk = createAsyncThunk(
   "auth/login",
-  async ({ username }) => {
-    await new Promise((resolve) => setTimeout(resolve, 400));
+  async ({ email, password }, { rejectWithValue }) => {
+    try {
+      const response = await axiosInstance.post(AUTH.LOGIN, { email, password });
+      // Backend wraps in ApiResponse: response.data.data holds the payload
+      const payload = response.data?.data ?? response.data;
+      const token = payload?.token ?? payload?.accessToken ?? payload;
 
-    const profile = {
-      id: "usr-001",
-      name: username,
-      preferred_username: username,
-      role: "SUPER_ADMIN",
-    };
+      if (!token || typeof token !== "string") {
+        return rejectWithValue("Unexpected response from server");
+      }
 
-    localStorage.setItem("craviq_token", DUMMY_TOKEN);
-    localStorage.setItem("craviq_user", JSON.stringify(profile));
+      // Decode JWT claims to build the user profile
+      let user;
+      try {
+        const decoded = jwtDecode(token);
+        user = {
+          id:                 decoded.sub || decoded.userId || decoded.id,
+          name:               decoded.name || decoded.fullName || decoded.given_name || email.split("@")[0],
+          email:              decoded.email || email,
+          role:               decoded.role || (Array.isArray(decoded.roles) ? decoded.roles[0] : null),
+          preferred_username: decoded.preferred_username || decoded.email || email,
+        };
+      } catch {
+        // JWT decode failed — use whatever the server returned alongside the token
+        user = payload?.user || {
+          email,
+          name: email.split("@")[0],
+          preferred_username: email,
+          role: "SALES_EXECUTIVE",
+        };
+      }
 
-    return { access_token: DUMMY_TOKEN, user: profile };
+      localStorage.setItem("craviq_token", token);
+      localStorage.setItem("craviq_user", JSON.stringify(user));
+
+      return { access_token: token, user };
+    } catch (error) {
+      const msg =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        (error.response?.status === 401 ? "Invalid email or password" : "Login failed. Check the server is running.");
+      return rejectWithValue(msg);
+    }
   }
 );
 
-// ─── RESTORE USER FROM STORAGE ───────────────────────────────────────
 const storedUser = () => {
   try {
     const u = localStorage.getItem("craviq_user");
@@ -32,7 +60,6 @@ const storedUser = () => {
   }
 };
 
-// ─── SLICE ───────────────────────────────────────────────────────────
 const authSlice = createSlice({
   name: "auth",
   initialState: {

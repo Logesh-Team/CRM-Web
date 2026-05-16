@@ -40,12 +40,13 @@ const SECTION_FIELDS = [
   {
     title: 'Location',
     fields: [
-      { name: 'address1', label: 'Address Line 1', xs: 12 },
-      { name: 'address2', label: 'Address Line 2', xs: 12 },
+      { name: 'addressLine1', label: 'Address Line 1', xs: 12 },
+      { name: 'addressLine2', label: 'Address Line 2', xs: 12 },
       { name: 'city', label: 'City', xs: 12, sm: 4 },
       { name: 'state', label: 'State', xs: 12, sm: 4 },
       { name: 'pinCode', label: 'PIN Code', xs: 12, sm: 4 },
       { name: 'country', label: 'Country', xs: 12, sm: 6, defaultValue: 'India' },
+      { name: 'googleMapsLink', label: 'Google Maps Link', xs: 12, sm: 6 },
     ],
   },
   {
@@ -56,7 +57,9 @@ const SECTION_FIELDS = [
       { name: 'mobile', label: 'Mobile *', xs: 12, sm: 4 },
       { name: 'alternateMobile', label: 'Alternate Mobile', xs: 12, sm: 4 },
       { name: 'email', label: 'Email', xs: 12, sm: 4 },
-      { name: 'whatsappNumber', label: 'WhatsApp Number', xs: 12, sm: 6 },
+      { name: 'whatsappNumber', label: 'WhatsApp Number', xs: 12, sm: 4 },
+      { name: 'website', label: 'Website', xs: 12, sm: 4 },
+      { name: 'gstNumber', label: 'GST Number', xs: 12, sm: 4 },
     ],
   },
 ];
@@ -83,7 +86,10 @@ export default function LeadFormPage() {
 
   useEffect(() => {
     if (isEdit) dispatch(fetchLeadById(id));
-    axiosInstance.get(USERS.LIST).then((r) => setUsers(r.data?.data || [])).catch(() => {});
+    axiosInstance.get(USERS.LIST).then((r) => {
+      const data = r.data?.data;
+      setUsers(data?.content || (Array.isArray(data) ? data : []));
+    }).catch(() => {});
   }, [id, isEdit, dispatch]);
 
   useEffect(() => {
@@ -181,8 +187,18 @@ export default function LeadFormPage() {
                 <FormControl size="small" fullWidth>
                   <InputLabel>Lead Source</InputLabel>
                   <Select label="Lead Source" defaultValue="" {...register('leadSource')}>
-                    {['WEBSITE','REFERRAL','COLD_CALL','LINKEDIN','INDIAMART','TRADE_FAIR','AI_SEARCH','OTHER'].map((s) => (
-                      <MenuItem key={s} value={s}>{s.replace('_', ' ')}</MenuItem>
+                    {[
+                      { v: 'WEBSITE',    l: 'Website' },
+                      { v: 'REFERRAL',   l: 'Referral' },
+                      { v: 'COLD_CALL',  l: 'Cold Call' },
+                      { v: 'LINKEDIN',   l: 'LinkedIn' },
+                      { v: 'INDIAMART',  l: 'IndiaMart' },
+                      { v: 'TRADE_FAIR', l: 'Trade Fair' },
+                      { v: 'CAMPAIGN',   l: 'Campaign' },
+                      { v: 'MANUAL',     l: 'Manual Entry' },
+                      { v: 'OTHER',      l: 'Other' },
+                    ].map(({ v, l }) => (
+                      <MenuItem key={v} value={v}>{l}</MenuItem>
                     ))}
                   </Select>
                 </FormControl>
@@ -278,6 +294,10 @@ export default function LeadFormPage() {
               </Grid>
               <Grid item xs={12}>
                 <TextField size="small" fullWidth label="Product Interested" multiline rows={2} {...register('productInterested')} />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField size="small" fullWidth label="Next Follow-up Date" type="date"
+                  InputLabelProps={{ shrink: true }} {...register('nextFollowUpDate')} />
               </Grid>
             </Grid>
           </AccordionDetails>

@@ -1,49 +1,41 @@
-import { Box, MenuItem, TextField } from "@mui/material";
-import { useDispatch, useSelector } from "react-redux";
-import { setFilters } from "../features/scheduler/schedulerSlice";
+import { Box, MenuItem, TextField } from '@mui/material';
+import { useDispatch, useSelector } from 'react-redux';
+import { setDemoFilters } from '../features/demos/demosSlice';
+
+const STATUSES = ['All', 'SCHEDULED', 'COMPLETED', 'NO_SHOW', 'CANCELLED'];
+const STATUS_LABELS = {
+  All: 'All', SCHEDULED: 'Scheduled', COMPLETED: 'Completed',
+  NO_SHOW: 'No Show', CANCELLED: 'Cancelled',
+};
 
 export default function CalendarFilters() {
   const dispatch = useDispatch();
-  const filters = useSelector((s) => s.scheduler.filters);
-  const events = useSelector((s) => s.scheduler.events);
+  const { filters, demos } = useSelector(s => s.demos);
 
-  // dynamic dropdown values from events
-  const salesReps = [
-    "All",
-    ...new Set(events.map((e) => e.extendedProps?.salesRep).filter(Boolean)),
-  ];
-
-  const statuses = ["All", "Scheduled", "Completed", "No Show", "Cancelled"];
+  const assignees = ['All', ...new Set(demos.map(d => d.assignedTo).filter(Boolean))];
+  const assigneeNames = ['All', ...new Set(demos.map(d => d.assignedToName).filter(Boolean))];
 
   return (
-    <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+    <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
       <TextField
-        select
-        label="Sales Rep"
-        size="small"
-        sx={{ width: 180 }}
-        value={filters.salesRep}
-        onChange={(e) => dispatch(setFilters({ salesRep: e.target.value }))}
+        select label="Presenter" size="small" sx={{ width: 180, fontSize: 13 }}
+        value={filters.assignedTo || 'All'}
+        onChange={e => dispatch(setDemoFilters({ assignedTo: e.target.value }))}
       >
-        {salesReps.map((rep) => (
-          <MenuItem key={rep} value={rep}>
-            {rep}
+        {assigneeNames.map((name, i) => (
+          <MenuItem key={i} value={i === 0 ? 'All' : assignees[i]} sx={{ fontSize: 13 }}>
+            {name}
           </MenuItem>
         ))}
       </TextField>
 
       <TextField
-        select
-        label="Status"
-        size="small"
-        sx={{ width: 180 }}
-        value={filters.status}
-        onChange={(e) => dispatch(setFilters({ status: e.target.value }))}
+        select label="Status" size="small" sx={{ width: 180, fontSize: 13 }}
+        value={filters.status || 'All'}
+        onChange={e => dispatch(setDemoFilters({ status: e.target.value }))}
       >
-        {statuses.map((s) => (
-          <MenuItem key={s} value={s}>
-            {s}
-          </MenuItem>
+        {STATUSES.map(s => (
+          <MenuItem key={s} value={s} sx={{ fontSize: 13 }}>{STATUS_LABELS[s]}</MenuItem>
         ))}
       </TextField>
     </Box>

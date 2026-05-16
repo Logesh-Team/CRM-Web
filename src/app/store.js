@@ -5,6 +5,8 @@ import activitiesReducer from '../features/activities/activitiesSlice';
 import aiSearchReducer from '../features/ai-search/aiSearchSlice';
 import usersReducer from '../features/users/usersSlice';
 import schedulerReducer from '../features/scheduler/schedulerSlice';
+import quotationsReducer from '../features/quotations/quotationsSlice';
+import demosReducer from '../features/demos/demosSlice';
 
 const store = configureStore({
   reducer: {
@@ -14,6 +16,8 @@ const store = configureStore({
     aiSearch: aiSearchReducer,
     users: usersReducer,
     scheduler: schedulerReducer,
+    quotations: quotationsReducer,
+    demos: demosReducer,
   },
 });
 

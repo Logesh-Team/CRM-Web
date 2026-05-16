@@ -1,383 +1,413 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from 'react';
 import {
-  Drawer,
-  TextField,
-  Button,
-  Stack,
-  Typography,
-  Divider,
-  Link,
-} from "@mui/material";
-import { useDispatch, useSelector } from "react-redux";
+  Drawer, Stack, Typography, Divider, Box, Button, TextField,
+  FormControl, InputLabel, Select, MenuItem, CircularProgress,
+  Chip, IconButton, Link, Tooltip,
+} from '@mui/material';
 import {
-  addEvent,
-  updateEvent,
-  deleteEvent,
-  closeDialog,
-} from "../features/scheduler/schedulerSlice";
-import { formatDateTime } from "../utils/dateFormat";
+  EditOutlined, CancelOutlined, CheckCircleOutlined,
+  PersonOffOutlined, OpenInNewOutlined,
+} from '@mui/icons-material';
+import { useDispatch, useSelector } from 'react-redux';
+import {
+  closeDemoDialog, updateDemo, cancelDemo, postDemo, markNoShow,
+} from '../features/demos/demosSlice';
+import { fetchUsers } from '../features/users/usersSlice';
+import toast from 'react-hot-toast';
+import { formatDateTime } from '../utils/formatDate';
+
+const PLATFORM_LABELS = {
+  GOOGLE_MEET: 'Google Meet', ZOOM: 'Zoom',
+  IN_PERSON: 'In Person', OTHER: 'Other',
+};
+const STATUS_COLORS = {
+  SCHEDULED: { bg: '#E6F1FB', text: '#185FA5' },
+  COMPLETED:  { bg: '#EAF3DE', text: '#3B6D11' },
+  CANCELLED:  { bg: '#FCEBEB', text: '#A32D2D' },
+  NO_SHOW:    { bg: '#FAEEDA', text: '#BA7517' },
+};
+
+function DetailRow({ label, value, link }) {
+  if (!value) return null;
+  return (
+    <Stack spacing={0.25}>
+      <Typography sx={{ fontSize: 10, fontWeight: 600, color: '#5A5A56', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        {label}
+      </Typography>
+      {link ? (
+        <Link href={value} target="_blank" rel="noopener noreferrer"
+          sx={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          {value} <OpenInNewOutlined sx={{ fontSize: 12 }} />
+        </Link>
+      ) : (
+        <Typography sx={{ fontSize: 13, color: '#1A1A18', wordBreak: 'break-word' }}>{value}</Typography>
+      )}
+    </Stack>
+  );
+}
+
+function StatusChip({ status }) {
+  const c = STATUS_COLORS[status] || STATUS_COLORS.SCHEDULED;
+  return (
+    <span style={{
+      display: 'inline-block', padding: '2px 10px', borderRadius: 999,
+      fontSize: 11, fontWeight: 600, background: c.bg, color: c.text,
+    }}>
+      {status?.replace(/_/g, ' ')}
+    </span>
+  );
+}
 
 export default function EventDialog() {
   const dispatch = useDispatch();
-  const { dialogOpen, selectedEvent } = useSelector((s) => s.scheduler);
+  const { dialogOpen, selectedDemo } = useSelector(s => s.demos);
+  const { users } = useSelector(s => s.users);
 
-  const [isEditMode, setIsEditMode] = useState(false);
+  const [mode, setMode] = useState('view'); // view | edit | post-demo | cancel
+  const [editForm, setEditForm] = useState({});
+  const [postForm, setPostForm] = useState({ outcome: '', postDemoNotes: '' });
+  const [cancelReason, setCancelReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const initialFormRef = useRef(null);
-  const resetForm = () => {
-    if (initialFormRef.current) {
-      setForm(initialFormRef.current);
-    }
-    setIsEditMode(false);
-  };
-  const companies = [
-    {
-      id: "c1",
-      name: "Acme Pvt Ltd",
-      location: "Chennai",
-      contacts: ["John Smith", "Priya Kumar"],
-    },
-    {
-      id: "c2",
-      name: "Globex Corporation",
-      location: "Bangalore",
-      contacts: ["Michael Scott", "Dwight Schrute"],
-    },
-  ];
-
-  const DetailRow = ({ label, value }) => {
-    const isLink =
-      typeof value === "string" &&
-      (value.startsWith("http://") || value.startsWith("https://"));
-
-    return (
-      <Stack spacing={0.5}>
-        <Typography variant="caption" color="text.secondary">
-          {label}
-        </Typography>
-
-        {isLink ? (
-          <Link
-            href={value}
-            target="_blank"
-            rel="noopener noreferrer"
-            underline="hover"
-            sx={{
-              fontWeight: 500,
-              fontSize: "0.95rem",
-              color: "#2563eb",
-              "&:hover": {
-                color: "#1d4ed8",
-                textDecoration: "underline",
-              },
-            }}
-          >
-            {value}
-          </Link>
-        ) : (
-          <Typography variant="body1" fontWeight={500}>
-            {value || "-"}
-          </Typography>
-        )}
-      </Stack>
-    );
-  };
-  const salesUsers = ["Darlene Robertson", "Guy Hawkins", "Esther Howard"];
-  const demoUsers = ["Marvin McKinney", "Brooklyn Simmons", "Kathryn Murphy"];
-
-  const [form, setForm] = useState({
-    title: "",
-    start: "",
-    end: "",
-    description: "",
-    company: "",
-    contact: "",
-    location: "",
-    salesRep: "",
-    demoBy: "",
-    status: "Scheduled",
-  });
-
-  const selectedCompany = companies.find((c) => c.name === form.company);
-  const contacts = selectedCompany ? selectedCompany.contacts : [];
-
-  const handleChange = (e) =>
-    setForm({ ...form, [e.target.name]: e.target.value });
-
-  const toDateTimeLocal = (date) => {
-    if (!date) return "";
-    const d = new Date(date);
-    const pad = (n) => String(n).padStart(2, "0");
-
-    return (
-      d.getFullYear() +
-      "-" +
-      pad(d.getMonth() + 1) +
-      "-" +
-      pad(d.getDate()) +
-      "T" +
-      pad(d.getHours()) +
-      ":" +
-      pad(d.getMinutes())
-    );
-  };
-
-  // 🔹 Load event
   useEffect(() => {
-    if (!selectedEvent) return;
+    if (dialogOpen) dispatch(fetchUsers());
+  }, [dialogOpen, dispatch]);
 
-    const newForm = {
-      title: selectedEvent.title || "",
-      start: toDateTimeLocal(selectedEvent.start),
-      end: toDateTimeLocal(selectedEvent.end),
-      description: selectedEvent.extendedProps?.description || "",
-      company: selectedEvent.extendedProps?.company || "",
-      contact: selectedEvent.extendedProps?.contact || "",
-      location: selectedEvent.extendedProps?.location || "",
-      salesRep: selectedEvent.extendedProps?.salesRep || "",
-      demoBy: selectedEvent.extendedProps?.demoBy || "",
-      status: selectedEvent.extendedProps?.status || "Scheduled",
-    };
+  useEffect(() => {
+    if (selectedDemo) {
+      setEditForm({
+        title: selectedDemo.title || '',
+        scheduledAt: selectedDemo.scheduledAt ? selectedDemo.scheduledAt.substring(0, 16) : '',
+        durationMinutes: selectedDemo.durationMinutes || 60,
+        platform: selectedDemo.platform || 'GOOGLE_MEET',
+        location: selectedDemo.location || '',
+        assignedTo: selectedDemo.assignedTo || '',
+        notes: selectedDemo.notes || '',
+      });
+      setMode('view');
+    }
+  }, [selectedDemo]);
 
-    setForm(newForm);
-    setIsEditMode(false);
-
-    // store original snapshot
-    initialFormRef.current = newForm;
-  }, [selectedEvent]);
-
-  // 🔹 check changes
-  const hasChanges = () => {
-    if (!initialFormRef.current) return true;
-
-    return JSON.stringify(initialFormRef.current) !== JSON.stringify(form);
+  const close = () => {
+    dispatch(closeDemoDialog());
+    setMode('view');
+    setCancelReason('');
+    setPostForm({ outcome: '', postDemoNotes: '' });
   };
 
-  // SAVE
-  const handleSave = () => {
-    // 🚫 prevent save if nothing changed
-    if (!hasChanges()) {
-      setIsEditMode(false);
-      return;
-    }
-
-    const payload = {
-      title: form.title,
-      start: form.start,
-      end: form.end,
-      extendedProps: {
-        description: form.description,
-        company: form.company,
-        contact: form.contact,
-        location: form.location,
-        salesRep: form.salesRep,
-        demoBy: form.demoBy,
-        status: form.status,
+  const handleSaveEdit = async () => {
+    setSubmitting(true);
+    const result = await dispatch(updateDemo({
+      id: selectedDemo.id,
+      data: {
+        ...editForm,
+        durationMinutes: Number(editForm.durationMinutes),
+        assignedTo: editForm.assignedTo || null,
       },
-    };
-
-    // 🔁 UPDATE or ADD
-    if (selectedEvent) {
-      dispatch(updateEvent({ ...payload, id: selectedEvent.id }));
+    }));
+    setSubmitting(false);
+    if (updateDemo.fulfilled.match(result)) {
+      toast.success('Demo updated');
+      setMode('view');
     } else {
-      dispatch(addEvent({ ...payload, id: Date.now().toString() }));
+      toast.error(result.payload || 'Update failed');
     }
-
-    // ✅ update baseline snapshot so future changes compare correctly
-    initialFormRef.current = form;
-
-    // 🚪 exit edit mode + close drawer
-    setIsEditMode(false);
-    dispatch(closeDialog());
   };
-  const handleDelete = () => {
-    if (!window.confirm("Delete this meeting?")) return;
-    dispatch(deleteEvent(selectedEvent.id));
-    dispatch(closeDialog());
+
+  const handleCancel = async () => {
+    setSubmitting(true);
+    const result = await dispatch(cancelDemo({ id: selectedDemo.id, reason: cancelReason }));
+    setSubmitting(false);
+    if (cancelDemo.fulfilled.match(result)) {
+      toast.success('Demo cancelled');
+      close();
+    } else {
+      toast.error(result.payload || 'Cancel failed');
+    }
   };
+
+  const handlePostDemo = async () => {
+    setSubmitting(true);
+    const result = await dispatch(postDemo({ id: selectedDemo.id, data: postForm }));
+    setSubmitting(false);
+    if (postDemo.fulfilled.match(result)) {
+      toast.success('Post-demo recorded');
+      close();
+    } else {
+      toast.error(result.payload || 'Failed');
+    }
+  };
+
+  const handleNoShow = async () => {
+    setSubmitting(true);
+    const result = await dispatch(markNoShow(selectedDemo.id));
+    setSubmitting(false);
+    if (markNoShow.fulfilled.match(result)) {
+      toast.success('Marked as no-show');
+      close();
+    } else {
+      toast.error(result.payload || 'Failed');
+    }
+  };
+
+  if (!selectedDemo) return null;
+
+  const isScheduled = selectedDemo.status === 'SCHEDULED';
+  const canEdit = isScheduled;
 
   return (
-    <Drawer
-      anchor="right"
-      open={dialogOpen}
-      onClose={() => dispatch(closeDialog())}
-    >
-      <Stack spacing={2} p={3} width={420}>
-        <Typography variant="h5">Meeting Details</Typography>
-        <Divider />
+    <Drawer anchor="right" open={dialogOpen} onClose={close}>
+      <Stack spacing={0} sx={{ width: 420, height: '100%' }}>
+        {/* Header */}
+        <Box sx={{ p: 3, pb: 2, borderBottom: '1px solid #E3E1DA' }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <Typography sx={{ fontSize: 16, fontWeight: 700, color: '#1A1A18', flex: 1, mr: 1 }}>
+              {selectedDemo.title}
+            </Typography>
+            <StatusChip status={selectedDemo.status} />
+          </Box>
+          {selectedDemo.leadCompanyName && (
+            <Typography sx={{ fontSize: 12, color: '#5A5A56', mt: 0.5 }}>
+              {selectedDemo.leadCompanyName}
+            </Typography>
+          )}
+        </Box>
 
-        {/* VIEW MODE */}
-        {!isEditMode && (
-          <>
-            <DetailRow label="Title" value={form.title} />
-            <DetailRow label="Start Time" value={formatDateTime(form.start)} />
-            <DetailRow label="End Time" value={formatDateTime(form.end)} />
-            <DetailRow
-              label="Meet Link"
-              value="https://meet.google.com/abc-defg-hij"
-            />
-            <Divider />
+        {/* Body */}
+        <Box sx={{ flex: 1, overflowY: 'auto', p: 3 }}>
+          {mode === 'view' && (
+            <Stack spacing={2}>
+              <DetailRow label="Scheduled" value={formatDateTime(selectedDemo.scheduledAt)} />
+              <DetailRow label="Duration" value={`${selectedDemo.durationMinutes} minutes`} />
+              <DetailRow label="Platform" value={PLATFORM_LABELS[selectedDemo.platform] || selectedDemo.platform} />
+              {selectedDemo.meetLink && (
+                <DetailRow label="Meet Link" value={selectedDemo.meetLink} link />
+              )}
+              {selectedDemo.location && (
+                <DetailRow label="Location" value={selectedDemo.location} />
+              )}
+              <Divider />
+              <DetailRow label="Demo Presenter" value={selectedDemo.assignedToName || '—'} />
+              <DetailRow label="Scheduled By" value={selectedDemo.scheduledByName} />
+              {selectedDemo.notes && <DetailRow label="Notes" value={selectedDemo.notes} />}
 
-            <DetailRow label="Company" value={form.company} />
-            <DetailRow label="Contact Person" value={form.contact} />
-            <DetailRow label="Location" value={form.location} />
-            <Divider />
+              {/* Participants */}
+              {selectedDemo.participants?.length > 0 && (
+                <Box>
+                  <Typography sx={{ fontSize: 10, fontWeight: 600, color: '#5A5A56', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.5 }}>
+                    Participants
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                    {selectedDemo.participants.map((p, i) => (
+                      <Chip key={i} size="small" label={p.name || p.email}
+                        sx={{ fontSize: 11 }} />
+                    ))}
+                  </Box>
+                </Box>
+              )}
 
-            <DetailRow label="Sales Representative" value={form.salesRep} />
-            <DetailRow label="Demo By" value={form.demoBy} />
-            <DetailRow label="Status" value={form.status} />
-            <DetailRow label="Description" value={form.description} />
+              {/* Agenda */}
+              {selectedDemo.agendaItems?.length > 0 && (
+                <Box>
+                  <Typography sx={{ fontSize: 10, fontWeight: 600, color: '#5A5A56', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.5 }}>
+                    Agenda
+                  </Typography>
+                  {selectedDemo.agendaItems.map((a, i) => (
+                    <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.25 }}>
+                      <Box sx={{
+                        width: 16, height: 16, borderRadius: 2, border: '1.5px solid',
+                        borderColor: a.done ? '#3B6D11' : '#E3E1DA',
+                        background: a.done ? '#3B6D11' : 'transparent',
+                        flexShrink: 0,
+                      }} />
+                      <Typography sx={{ fontSize: 12, color: a.done ? '#5A5A56' : '#1A1A18',
+                        textDecoration: a.done ? 'line-through' : 'none' }}>
+                        {a.title}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+              )}
 
-            <Button variant="contained" onClick={() => setIsEditMode(true)}>
-              Edit Meeting
-            </Button>
-          </>
-        )}
+              {/* Post-demo data */}
+              {selectedDemo.outcome && (
+                <>
+                  <Divider />
+                  <DetailRow label="Outcome" value={selectedDemo.outcome} />
+                  {selectedDemo.postDemoNotes && (
+                    <DetailRow label="Post-Demo Notes" value={selectedDemo.postDemoNotes} />
+                  )}
+                </>
+              )}
+            </Stack>
+          )}
 
-        {/* EDIT MODE */}
-        {isEditMode && (
-          <>
-            <TextField
-              label="Title"
-              name="title"
-              value={form.title}
-              onChange={handleChange}
-            />
+          {mode === 'edit' && (
+            <Stack spacing={2}>
+              <TextField size="small" fullWidth label="Title"
+                value={editForm.title} onChange={e => setEditForm({...editForm, title: e.target.value})}
+                inputProps={{ style: { fontSize: 13 } }} />
+              <TextField size="small" fullWidth label="Date & Time"
+                type="datetime-local" InputLabelProps={{ shrink: true }}
+                value={editForm.scheduledAt}
+                onChange={e => setEditForm({...editForm, scheduledAt: e.target.value})}
+                inputProps={{ style: { fontSize: 13 } }} />
+              <FormControl size="small" fullWidth>
+                <InputLabel sx={{ fontSize: 13 }}>Duration (min)</InputLabel>
+                <Select label="Duration (min)" value={editForm.durationMinutes}
+                  onChange={e => setEditForm({...editForm, durationMinutes: e.target.value})}
+                  sx={{ fontSize: 13 }}>
+                  {[30,45,60,90,120].map(d => <MenuItem key={d} value={d} sx={{ fontSize: 13 }}>{d} min</MenuItem>)}
+                </Select>
+              </FormControl>
+              <FormControl size="small" fullWidth>
+                <InputLabel sx={{ fontSize: 13 }}>Platform</InputLabel>
+                <Select label="Platform" value={editForm.platform}
+                  onChange={e => setEditForm({...editForm, platform: e.target.value})}
+                  sx={{ fontSize: 13 }}>
+                  {[['GOOGLE_MEET','Google Meet'],['ZOOM','Zoom'],['IN_PERSON','In Person'],['OTHER','Other']].map(([v,l]) =>
+                    <MenuItem key={v} value={v} sx={{ fontSize: 13 }}>{l}</MenuItem>)}
+                </Select>
+              </FormControl>
+              {(editForm.platform === 'IN_PERSON' || editForm.platform === 'OTHER') && (
+                <TextField size="small" fullWidth label="Location"
+                  value={editForm.location} onChange={e => setEditForm({...editForm, location: e.target.value})}
+                  inputProps={{ style: { fontSize: 13 } }} />
+              )}
+              <FormControl size="small" fullWidth>
+                <InputLabel sx={{ fontSize: 13 }}>Demo Presenter</InputLabel>
+                <Select label="Demo Presenter" value={editForm.assignedTo}
+                  onChange={e => setEditForm({...editForm, assignedTo: e.target.value})}
+                  sx={{ fontSize: 13 }}>
+                  <MenuItem value="" sx={{ fontSize: 13 }}>Unassigned</MenuItem>
+                  {users.map(u => <MenuItem key={u.id} value={u.id} sx={{ fontSize: 13 }}>{u.name || u.email}</MenuItem>)}
+                </Select>
+              </FormControl>
+              <TextField size="small" fullWidth label="Notes" multiline rows={2}
+                value={editForm.notes} onChange={e => setEditForm({...editForm, notes: e.target.value})}
+                inputProps={{ style: { fontSize: 13 } }} />
+            </Stack>
+          )}
 
-            <TextField
-              type="datetime-local"
-              name="start"
-              value={form.start}
-              onChange={handleChange}
-              InputLabelProps={{ shrink: true }}
-            />
+          {mode === 'post-demo' && (
+            <Stack spacing={2}>
+              <Typography sx={{ fontSize: 13, color: '#5A5A56' }}>
+                Record the outcome of this demo.
+              </Typography>
+              <FormControl size="small" fullWidth>
+                <InputLabel sx={{ fontSize: 13 }}>Outcome</InputLabel>
+                <Select label="Outcome" value={postForm.outcome}
+                  onChange={e => setPostForm({...postForm, outcome: e.target.value})}
+                  sx={{ fontSize: 13 }}>
+                  <MenuItem value="INTERESTED" sx={{ fontSize: 13 }}>Interested — proceeding</MenuItem>
+                  <MenuItem value="QUOTATION_REQUESTED" sx={{ fontSize: 13 }}>Quotation Requested</MenuItem>
+                  <MenuItem value="FOLLOW_UP" sx={{ fontSize: 13 }}>Needs Follow-up</MenuItem>
+                  <MenuItem value="NOT_INTERESTED" sx={{ fontSize: 13 }}>Not Interested</MenuItem>
+                </Select>
+              </FormControl>
+              <TextField size="small" fullWidth label="Post-Demo Notes" multiline rows={4}
+                value={postForm.postDemoNotes}
+                onChange={e => setPostForm({...postForm, postDemoNotes: e.target.value})}
+                inputProps={{ style: { fontSize: 13 } }} />
+            </Stack>
+          )}
 
-            <TextField
-              type="datetime-local"
-              name="end"
-              value={form.end}
-              onChange={handleChange}
-              InputLabelProps={{ shrink: true }}
-            />
+          {mode === 'cancel' && (
+            <Stack spacing={2}>
+              <Typography sx={{ fontSize: 13, color: '#5A5A56' }}>
+                Provide a reason for cancellation (optional).
+              </Typography>
+              <TextField size="small" fullWidth label="Reason" multiline rows={3}
+                value={cancelReason} onChange={e => setCancelReason(e.target.value)}
+                inputProps={{ style: { fontSize: 13 } }} />
+            </Stack>
+          )}
+        </Box>
 
-            <TextField
-              select
-              label="Company"
-              name="company"
-              value={form.company}
-              onChange={(e) => {
-                const companyName = e.target.value;
-                const companyObj = companies.find(
-                  (c) => c.name === companyName,
-                );
+        {/* Footer actions */}
+        <Box sx={{ p: 2.5, borderTop: '1px solid #E3E1DA' }}>
+          {mode === 'view' && (
+            <Stack spacing={1}>
+              {isScheduled && (
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Button size="small" variant="outlined" startIcon={<EditOutlined />}
+                    onClick={() => setMode('edit')}
+                    sx={{ flex: 1, fontSize: 12, borderColor: '#E3E1DA', color: '#5A5A56' }}>
+                    Edit
+                  </Button>
+                  <Button size="small" variant="contained" startIcon={<CheckCircleOutlined />}
+                    onClick={() => setMode('post-demo')}
+                    sx={{ flex: 1, fontSize: 12, background: '#3B6D11' }}>
+                    Mark Done
+                  </Button>
+                </Box>
+              )}
+              {isScheduled && (
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Button size="small" variant="outlined" startIcon={<PersonOffOutlined />}
+                    onClick={handleNoShow} disabled={submitting}
+                    sx={{ flex: 1, fontSize: 12, borderColor: '#BA7517', color: '#BA7517' }}>
+                    No Show
+                  </Button>
+                  <Button size="small" variant="outlined" startIcon={<CancelOutlined />}
+                    onClick={() => setMode('cancel')}
+                    sx={{ flex: 1, fontSize: 12, borderColor: '#A32D2D', color: '#A32D2D' }}>
+                    Cancel
+                  </Button>
+                </Box>
+              )}
+              <Button size="small" onClick={close}
+                sx={{ fontSize: 12, color: '#5A5A56' }}>
+                Close
+              </Button>
+            </Stack>
+          )}
 
-                setForm({
-                  ...form,
-                  company: companyName,
-                  contact: "",
-                  location: companyObj?.location || "",
-                });
-              }}
-              SelectProps={{ native: true }}
-            >
-              <option value="" />
-              {companies.map((c) => (
-                <option key={c.id} value={c.name}>
-                  {c.name}
-                </option>
-              ))}
-            </TextField>
+          {mode === 'edit' && (
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button onClick={() => setMode('view')} color="inherit" size="small"
+                sx={{ flex: 1, fontSize: 12 }}>
+                Cancel
+              </Button>
+              <Button variant="contained" size="small" onClick={handleSaveEdit}
+                disabled={submitting}
+                startIcon={submitting ? <CircularProgress size={13} color="inherit" /> : null}
+                sx={{ flex: 1, fontSize: 12 }}>
+                Save
+              </Button>
+            </Box>
+          )}
 
-            <TextField
-              select
-              name="contact"
-              value={form.contact}
-              onChange={handleChange}
-              SelectProps={{ native: true }}
-            >
-              <option value="" />
-              {contacts.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </TextField>
+          {mode === 'post-demo' && (
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button onClick={() => setMode('view')} color="inherit" size="small"
+                sx={{ flex: 1, fontSize: 12 }}>
+                Back
+              </Button>
+              <Button variant="contained" size="small" onClick={handlePostDemo}
+                disabled={submitting || !postForm.outcome}
+                startIcon={submitting ? <CircularProgress size={13} color="inherit" /> : null}
+                sx={{ flex: 1, fontSize: 12 }}>
+                Save Outcome
+              </Button>
+            </Box>
+          )}
 
-            <TextField
-              label="Location"
-              name="location"
-              value={form.location}
-              onChange={handleChange}
-            />
-
-            <TextField
-              select
-              name="salesRep"
-              value={form.salesRep}
-              onChange={handleChange}
-              SelectProps={{ native: true }}
-            >
-              <option value="" />
-              {salesUsers.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </TextField>
-
-            <TextField
-              select
-              name="demoBy"
-              value={form.demoBy}
-              onChange={handleChange}
-              SelectProps={{ native: true }}
-            >
-              <option value="" />
-              {demoUsers.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </TextField>
-
-            <TextField
-              select
-              name="status"
-              value={form.status}
-              onChange={handleChange}
-              SelectProps={{ native: true }}
-            >
-              <option>Scheduled</option>
-              <option>Completed</option>
-              <option>No Show</option>
-              <option>Cancelled</option>
-            </TextField>
-
-            <TextField
-              label="Description"
-              name="description"
-              value={form.description}
-              onChange={handleChange}
-              multiline
-              rows={3}
-            />
-
-            {/* 🔥 SAVE BUTTON BLOCKED IF NO CHANGE */}
-            <Button
-              variant="contained"
-              onClick={handleSave}
-              disabled={!hasChanges()}
-            >
-              Save Changes
-            </Button>
-
-            <Button color="error" onClick={handleDelete}>
-              Delete Meeting
-            </Button>
-
-            <Button onClick={resetForm}>Cancel Edit</Button>
-          </>
-        )}
+          {mode === 'cancel' && (
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button onClick={() => setMode('view')} color="inherit" size="small"
+                sx={{ flex: 1, fontSize: 12 }}>
+                Back
+              </Button>
+              <Button variant="contained" size="small" onClick={handleCancel}
+                disabled={submitting}
+                startIcon={submitting ? <CircularProgress size={13} color="inherit" /> : null}
+                sx={{ flex: 1, fontSize: 12, background: '#A32D2D', '&:hover': { background: '#8B2020' } }}>
+                Confirm Cancel
+              </Button>
+            </Box>
+          )}
+        </Box>
       </Stack>
     </Drawer>
   );

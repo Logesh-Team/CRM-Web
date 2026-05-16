@@ -17,7 +17,7 @@ import {
 import { loginThunk, clearAuthError } from '../features/auth/authSlice';
 
 const schema = yup.object({
-  username: yup.string().required('Username is required'),
+  email: yup.string().email('Enter a valid email').required('Email is required'),
   password: yup.string().min(6, 'Password must be at least 6 characters').required('Password is required'),
 });
 
@@ -90,15 +90,15 @@ export default function LoginPage() {
 
           <Box component="form" onSubmit={handleSubmit(onSubmit)} noValidate>
             <TextField
-              label="Username"
-              type="text"
+              label="Email Address"
+              type="email"
               fullWidth
               size="small"
               sx={{ mb: 2 }}
-              error={!!errors.username}
-              helperText={errors.username?.message}
-              autoComplete="username"
-              {...register('username')}
+              error={!!errors.email}
+              helperText={errors.email?.message}
+              autoComplete="email"
+              {...register('email')}
             />
             <TextField
               label="Password"

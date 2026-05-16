@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
-  InputBase,
   IconButton,
   Button,
   Badge,
@@ -16,7 +15,6 @@ import {
 import {
   NotificationsOutlined,
   SettingsOutlined,
-  SearchOutlined,
   MenuOutlined,
   AutoAwesomeOutlined,
   PersonOutlined,
@@ -29,6 +27,8 @@ import UserAvatar from '../common/UserAvatar';
 
 const PAGE_TITLES = {
   '/dashboard': 'Dashboard',
+  '/dashboard/sales-executive': 'My Dashboard',
+  '/dashboard/manager': 'Team Dashboard',
   '/leads': 'All Leads',
   '/leads/new': 'New Lead',
   '/pipeline': 'Pipeline',
@@ -37,11 +37,18 @@ const PAGE_TITLES = {
   '/follow-up': 'Follow-up',
   '/demos': 'Demos',
   '/quotations': 'Quotations',
-  '/reports': 'Reports',
   '/users': 'User Management',
   '/users/new': 'New User',
   '/users/audit-logs': 'Audit Logs',
   '/profile': 'My Profile',
+  '/quotations/create': 'New Quotation',
+  '/reports/lead-summary': 'Lead Summary',
+  '/reports/ai-call-batch': 'AI Call Batch',
+  '/reports/followup-activity': 'Follow-up Activity',
+  '/reports/demo-pipeline': 'Demo Pipeline',
+  '/reports/quotation-status': 'Quotation Status',
+  '/reports/conversion': 'Conversion Report',
+  '/reports/overdue-followup': 'Overdue Follow-ups',
 };
 
 function getPageTitle(pathname) {
@@ -50,6 +57,9 @@ function getPageTitle(pathname) {
   if (pathname.match(/^\/leads\/[^/]+$/)) return 'Lead Details';
   if (pathname.match(/^\/users\/[^/]+\/edit$/)) return 'Edit User';
   if (pathname.match(/^\/users\/[^/]+$/)) return 'User Details';
+  if (pathname.startsWith('/quotations')) return 'Quotations';
+  if (pathname.match(/^\/quotations\/[^/]+\/edit$/)) return 'Edit Quotation';
+  if (pathname.match(/^\/quotations\/[^/]+$/)) return 'Quotation Details';
   return 'Craviq CRM';
 }
 
@@ -58,7 +68,6 @@ export default function Topbar({ onMenuClick }) {
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const [searchVal, setSearchVal] = useState('');
   const [anchorEl, setAnchorEl] = useState(null);
   const { logout } = useAuth();
   const { name } = useCurrentUser();
@@ -86,50 +95,6 @@ export default function Topbar({ onMenuClick }) {
       <Typography sx={{ fontWeight: 700, fontSize: 15, color: '#1A1A18', flexShrink: 0 }}>
         {getPageTitle(location.pathname)}
       </Typography>
-
-      {/* Search */}
-      <Box
-        sx={{
-          flex: 1,
-          maxWidth: 360,
-          mx: 'auto',
-          background: '#F7F6F3',
-          border: '1px solid #E3E1DA',
-          borderRadius: '8px',
-          display: 'flex',
-          alignItems: 'center',
-          px: 1.5,
-          gap: 1,
-          height: 34,
-        }}
-      >
-        <SearchOutlined sx={{ fontSize: 15, color: '#5A5A56' }} />
-        <InputBase
-          value={searchVal}
-          onChange={(e) => setSearchVal(e.target.value)}
-          placeholder="Search leads, companies…"
-          sx={{
-            flex: 1,
-            fontSize: 13,
-            fontFamily: 'DM Sans',
-            color: '#1A1A18',
-            '& input::placeholder': { color: '#5A5A56' },
-          }}
-          inputProps={{ 'aria-label': 'global search' }}
-        />
-        <Typography
-          sx={{
-            fontSize: 10,
-            color: '#5A5A56',
-            fontFamily: 'DM Mono',
-            background: '#E3E1DA',
-            px: 0.75,
-            borderRadius: '4px',
-          }}
-        >
-          ⌘K
-        </Typography>
-      </Box>
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 'auto' }}>
         <IconButton size="small" sx={{ color: '#5A5A56' }}>

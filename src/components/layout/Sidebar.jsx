@@ -22,10 +22,15 @@ import {
   MarkEmailUnreadOutlined,
   VideocamOutlined,
   DescriptionOutlined,
-  BarChartOutlined,
   LogoutOutlined,
   ManageAccountsOutlined,
   HistoryOutlined,
+  GroupsOutlined,
+  AssessmentOutlined,
+  TimelineOutlined,
+  PhoneCallbackOutlined,
+  WarningAmberOutlined,
+  TrendingUpOutlined,
 } from '@mui/icons-material';
 import { useAuth } from '../../hooks/useAuth';
 import { useSelector } from 'react-redux';
@@ -37,12 +42,6 @@ import RoleBadge from '../common/RoleBadge';
 const SIDEBAR_WIDTH = 220;
 
 const NAV_SECTIONS = [
-  {
-    label: 'OVERVIEW',
-    items: [
-      { label: 'Dashboard', icon: DashboardOutlined, path: '/dashboard' },
-    ],
-  },
   {
     label: 'LEADS',
     items: [
@@ -62,13 +61,7 @@ const NAV_SECTIONS = [
     label: 'SALES',
     items: [
       { label: 'Demos', icon: VideocamOutlined, path: '/demos' },
-      { label: 'Quotations', icon: DescriptionOutlined, path: '/quotations', badge: true },
-    ],
-  },
-  {
-    label: 'ANALYTICS',
-    items: [
-      { label: 'Reports', icon: BarChartOutlined, path: '/reports' },
+      { label: 'Quotations', icon: DescriptionOutlined, path: '/quotations' },
     ],
   },
 ];
@@ -89,8 +82,24 @@ function SidebarContent({ onClose }) {
   const isActive = (path) => {
     if (path === '/dashboard') return location.pathname === '/dashboard';
     if (path === '/users') return location.pathname === '/users' || (location.pathname.startsWith('/users/') && !location.pathname.startsWith('/users/audit-logs'));
+    if (path === '/quotations') return location.pathname.startsWith('/quotations');
+    if (path === '/dashboard/sales-executive') return location.pathname === '/dashboard/sales-executive';
+    if (path === '/dashboard/manager') return location.pathname === '/dashboard/manager';
+    if (path.startsWith('/reports/')) return location.pathname === path;
     return location.pathname.startsWith(path);
   };
+
+  const dashboardPath = '/dashboard/sales-executive';
+
+  const REPORT_ITEMS = [
+    { label: 'Lead Summary', icon: AssessmentOutlined, path: '/reports/lead-summary' },
+    { label: 'Follow-up Activity', icon: TimelineOutlined, path: '/reports/followup-activity' },
+    { label: 'Demo Pipeline', icon: VideocamOutlined, path: '/reports/demo-pipeline' },
+    { label: 'Quotation Status', icon: DescriptionOutlined, path: '/reports/quotation-status' },
+    { label: 'Conversion', icon: TrendingUpOutlined, path: '/reports/conversion' },
+    { label: 'Overdue Follow-ups', icon: WarningAmberOutlined, path: '/reports/overdue-followup' },
+    ...((isSuperAdmin || isManager) ? [{ label: 'AI Call Batch', icon: PhoneCallbackOutlined, path: '/reports/ai-call-batch' }] : []),
+  ];
 
   return (
     <Box
@@ -143,6 +152,34 @@ function SidebarContent({ onClose }) {
 
       {/* Nav */}
       <Box sx={{ flex: 1, overflowY: 'auto', py: 1 }}>
+        {/* Dashboard — role-based */}
+        <Box sx={{ mb: 0.5 }}>
+          <Typography sx={{ fontSize: 9, fontWeight: 600, color: '#5A5A56', letterSpacing: '0.08em', px: 2, pt: 1.5, pb: 0.5 }}>
+            OVERVIEW
+          </Typography>
+          <List dense disablePadding>
+            {[
+              { label: 'Dashboard', icon: DashboardOutlined, path: dashboardPath },
+              ...(isSuperAdmin || isManager ? [{ label: 'Team Dashboard', icon: GroupsOutlined, path: '/dashboard/manager' }] : []),
+            ].map((item) => {
+              const Icon = item.icon;
+              const active = isActive(item.path);
+              return (
+                <ListItemButton key={item.label} onClick={() => handleNav(item.path)}
+                  sx={{ mx: 1, px: 1.5, py: 0.75, borderRadius: '7px', mb: 0.25,
+                    background: active ? '#1A1A18' : 'transparent',
+                    '&:hover': { background: active ? '#1A1A18' : '#F0EEE9' } }}>
+                  <ListItemIcon sx={{ minWidth: 30 }}>
+                    <Icon sx={{ fontSize: 16, color: active ? '#FFFFFF' : '#5A5A56' }} />
+                  </ListItemIcon>
+                  <ListItemText primary={item.label}
+                    primaryTypographyProps={{ fontSize: 13, fontWeight: active ? 600 : 400, color: active ? '#FFFFFF' : '#1A1A18', fontFamily: 'DM Sans' }} />
+                </ListItemButton>
+              );
+            })}
+          </List>
+        </Box>
+
         {NAV_SECTIONS.map((section) => (
           <Box key={section.label} sx={{ mb: 0.5 }}>
             <Typography
@@ -214,6 +251,31 @@ function SidebarContent({ onClose }) {
             </List>
           </Box>
         ))}
+
+        {/* Reports section */}
+        <Box sx={{ mb: 0.5 }}>
+          <Typography sx={{ fontSize: 9, fontWeight: 600, color: '#5A5A56', letterSpacing: '0.08em', px: 2, pt: 1.5, pb: 0.5 }}>
+            REPORTS
+          </Typography>
+          <List dense disablePadding>
+            {REPORT_ITEMS.map((item) => {
+              const Icon = item.icon;
+              const active = isActive(item.path);
+              return (
+                <ListItemButton key={item.label} onClick={() => handleNav(item.path)}
+                  sx={{ mx: 1, px: 1.5, py: 0.75, borderRadius: '7px', mb: 0.25,
+                    background: active ? '#1A1A18' : 'transparent',
+                    '&:hover': { background: active ? '#1A1A18' : '#F0EEE9' } }}>
+                  <ListItemIcon sx={{ minWidth: 30 }}>
+                    <Icon sx={{ fontSize: 16, color: active ? '#FFFFFF' : '#5A5A56' }} />
+                  </ListItemIcon>
+                  <ListItemText primary={item.label}
+                    primaryTypographyProps={{ fontSize: 12, fontWeight: active ? 600 : 400, color: active ? '#FFFFFF' : '#1A1A18', fontFamily: 'DM Sans' }} />
+                </ListItemButton>
+              );
+            })}
+          </List>
+        </Box>
 
         {/* ADMIN section — visible to SUPER_ADMIN and SALES_MANAGER */}
         {(isSuperAdmin || isManager) && (

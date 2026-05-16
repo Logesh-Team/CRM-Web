@@ -14,11 +14,16 @@ import {
 } from '@mui/icons-material';
 import toast from 'react-hot-toast';
 import { fetchLeadById, fetchLeadActivities, logActivity, updateLeadStatus } from '../features/leads/leadsSlice';
+import axiosInstance from '../api/axiosInstance';
+import { FOLLOW_UPS } from '../api/endpoints';
+import { fetchDemosByLead, openDemoDialog } from '../features/demos/demosSlice';
 import StatusBadge from '../components/common/StatusBadge';
 import GradeBadge from '../components/common/GradeBadge';
 import PriorityBadge from '../components/common/PriorityBadge';
 import ApiErrorAlert from '../components/common/ApiErrorAlert';
 import PageWrapper from '../components/common/PageWrapper';
+import CreateEventDialog from './CreateEventDialog';
+import EventDialog from './EventDialog';
 import { formatDateTime, timeAgo } from '../utils/formatDate';
 import { formatINR } from '../utils/formatCurrency';
 import { getAllowedNextStatuses } from '../utils/leadStatusTransitions';
@@ -99,6 +104,73 @@ function LogActivityDrawer({ open, onClose, leadId, onSuccess }) {
   );
 }
 
+function SetReminderDialog({ open, onClose, leadId }) {
+  const [form, setForm] = useState({ type: 'CALL', channel: 'IN_APP', dueDate: '', dueTime: '', notes: '' });
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!form.dueDate) { toast.error('Select a due date'); return; }
+    setSubmitting(true);
+    try {
+      await axiosInstance.post(FOLLOW_UPS.CREATE, { ...form, leadId: Number(leadId) });
+      toast.success('Reminder set');
+      setForm({ type: 'CALL', channel: 'IN_APP', dueDate: '', dueTime: '', notes: '' });
+      onClose();
+    } catch {
+      toast.error('Failed to set reminder');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
+      <DialogTitle sx={{ fontSize: 15, fontWeight: 700 }}>Set Reminder</DialogTitle>
+      <DialogContent sx={{ pt: '12px !important' }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <FormControl size="small" fullWidth>
+            <InputLabel sx={{ fontSize: 13 }}>Type</InputLabel>
+            <Select label="Type" value={form.type} onChange={e => setForm({ ...form, type: e.target.value })} sx={{ fontSize: 13 }}>
+              {['CALL','MEETING','QUOTATION_FOLLOW_UP','GENERAL_TASK'].map(t => (
+                <MenuItem key={t} value={t} sx={{ fontSize: 13 }}>{t.replace(/_/g, ' ')}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <FormControl size="small" fullWidth>
+            <InputLabel sx={{ fontSize: 13 }}>Notify via</InputLabel>
+            <Select label="Notify via" value={form.channel} onChange={e => setForm({ ...form, channel: e.target.value })} sx={{ fontSize: 13 }}>
+              <MenuItem value="IN_APP" sx={{ fontSize: 13 }}>In App</MenuItem>
+              <MenuItem value="EMAIL" sx={{ fontSize: 13 }}>Email</MenuItem>
+              <MenuItem value="WHATSAPP" sx={{ fontSize: 13 }}>WhatsApp</MenuItem>
+            </Select>
+          </FormControl>
+          <Box sx={{ display: 'flex', gap: 1.5 }}>
+            <TextField size="small" fullWidth label="Due Date *" type="date"
+              InputLabelProps={{ shrink: true }} value={form.dueDate}
+              onChange={e => setForm({ ...form, dueDate: e.target.value })}
+              inputProps={{ style: { fontSize: 13 } }} />
+            <TextField size="small" fullWidth label="Time" type="time"
+              InputLabelProps={{ shrink: true }} value={form.dueTime}
+              onChange={e => setForm({ ...form, dueTime: e.target.value })}
+              inputProps={{ style: { fontSize: 13 } }} />
+          </Box>
+          <TextField size="small" fullWidth label="Notes" multiline rows={2}
+            value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
+            inputProps={{ style: { fontSize: 13 } }} />
+        </Box>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5 }}>
+        <Button onClick={onClose} color="inherit" sx={{ fontSize: 13 }}>Cancel</Button>
+        <Button variant="contained" onClick={handleSubmit} disabled={submitting}
+          startIcon={submitting ? <CircularProgress size={14} color="inherit" /> : null}
+          sx={{ fontSize: 13 }}>
+          Set Reminder
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 function UpdateStatusDialog({ open, onClose, lead, onSuccess }) {
   const dispatch = useDispatch();
   const [newStatus, setNewStatus] = useState('');
@@ -152,14 +224,18 @@ export default function LeadDetailPage() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { selectedLead: lead, loading, error, activities, activitiesLoading } = useSelector((state) => state.leads);
+  const { leadDemos } = useSelector((state) => state.demos);
 
   const [activityDrawerOpen, setActivityDrawerOpen] = useState(false);
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
+  const [scheduleDemoOpen, setScheduleDemoOpen] = useState(false);
+  const [reminderDialogOpen, setReminderDialogOpen] = useState(false);
 
   useEffect(() => {
     if (id) {
       dispatch(fetchLeadById(id));
       dispatch(fetchLeadActivities(id));
+      dispatch(fetchDemosByLead(id));
     }
   }, [id, dispatch]);
 
@@ -167,12 +243,15 @@ export default function LeadDetailPage() {
 
   const getInitials = (name) => name?.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase() || '?';
 
+  const QUOTATION_ELIGIBLE = ['DEMO_DONE', 'NEGOTIATION', 'PROPOSAL_SENT', 'QUALIFIED', 'FOLLOW_UP'];
+  const canCreateQuote = QUOTATION_ELIGIBLE.includes(lead?.leadStatus);
+
   const QUICK_ACTIONS = [
     { label: 'Log Call', icon: PhoneOutlined, href: null },
     { label: 'WhatsApp', icon: ChatOutlined, href: lead?.whatsappNumber ? `https://wa.me/91${lead.whatsappNumber}` : null },
     { label: 'Send Email', icon: EmailOutlined, href: lead?.email ? `mailto:${lead.email}` : null },
     { label: 'Schedule Demo', icon: VideocamOutlined, href: null },
-    { label: 'Create Quote', icon: DescriptionOutlined, href: null },
+    { label: 'Create Quote', icon: DescriptionOutlined, href: null, disabled: !canCreateQuote, tooltip: !canCreateQuote ? 'Available after Demo Done or Negotiation' : '' },
     { label: 'Set Reminder', icon: AlarmOutlined, href: null },
   ];
 
@@ -212,7 +291,6 @@ export default function LeadDetailPage() {
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   <GradeBadge grade={lead.leadGrade} />
                   <PriorityBadge priority={lead.leadPriority} />
-                  <StatusBadge status={lead.leadStatus} />
                   <Tooltip title="Edit Lead">
                     <IconButton size="small" onClick={() => navigate(`/leads/${id}/edit`)}>
                       <EditOutlined sx={{ fontSize: 16 }} />
@@ -283,6 +361,45 @@ export default function LeadDetailPage() {
             </CardContent>
           </Card>
 
+          {/* Demos card */}
+          {leadDemos.length > 0 && (
+            <Card>
+              <CardContent sx={{ p: '16px 24px' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+                  <Typography sx={{ fontSize: 13, fontWeight: 600 }}>Demos</Typography>
+                  <Button size="small" variant="outlined" onClick={() => setScheduleDemoOpen(true)}
+                    sx={{ fontSize: 11, height: 28, borderColor: '#E3E1DA', color: '#5A5A56' }}>
+                    + Schedule
+                  </Button>
+                </Box>
+                {leadDemos.map(d => (
+                  <Box key={d.id}
+                    onClick={() => dispatch(openDemoDialog(d))}
+                    sx={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      p: '8px 12px', mb: 0.75, borderRadius: '8px',
+                      border: '1px solid #E3E1DA', cursor: 'pointer',
+                      '&:hover': { background: '#F7F6F3' },
+                    }}>
+                    <Box>
+                      <Typography sx={{ fontSize: 12, fontWeight: 600, color: '#1A1A18' }}>{d.title}</Typography>
+                      <Typography sx={{ fontSize: 11, color: '#5A5A56' }}>
+                        {d.scheduledAt ? new Date(d.scheduledAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}
+                      </Typography>
+                    </Box>
+                    <span style={{
+                      fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 999,
+                      background: d.status === 'SCHEDULED' ? '#E6F1FB' : d.status === 'COMPLETED' ? '#EAF3DE' : '#FCEBEB',
+                      color: d.status === 'SCHEDULED' ? '#185FA5' : d.status === 'COMPLETED' ? '#3B6D11' : '#A32D2D',
+                    }}>
+                      {d.status}
+                    </span>
+                  </Box>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Quick Actions card */}
           <Card>
             <CardContent sx={{ p: '16px 24px' }}>
@@ -291,20 +408,31 @@ export default function LeadDetailPage() {
                 {QUICK_ACTIONS.map((action) => {
                   const Icon = action.icon;
                   const btn = (
-                    <Button
-                      fullWidth
-                      variant="outlined"
-                      size="small"
-                      startIcon={<Icon sx={{ fontSize: 15 }} />}
-                      onClick={action.label === 'Log Call' ? () => setActivityDrawerOpen(true) : undefined}
-                      component={action.href ? 'a' : 'button'}
-                      href={action.href}
-                      target={action.href ? '_blank' : undefined}
-                      rel={action.href ? 'noopener noreferrer' : undefined}
-                      sx={{ height: 40, fontSize: 12, borderColor: '#E3E1DA', color: '#1A1A18' }}
-                    >
-                      {action.label}
-                    </Button>
+                    <Tooltip title={action.tooltip || ''} disableHoverListener={!action.tooltip}>
+                      <span style={{ width: '100%' }}>
+                        <Button
+                          fullWidth
+                          variant="outlined"
+                          size="small"
+                          disabled={action.disabled}
+                          startIcon={<Icon sx={{ fontSize: 15 }} />}
+                          onClick={
+                            action.label === 'Log Call' ? () => setActivityDrawerOpen(true)
+                            : action.label === 'Create Quote' ? () => navigate(`/quotations/create?leadId=${id}`)
+                            : action.label === 'Schedule Demo' ? () => setScheduleDemoOpen(true)
+                            : action.label === 'Set Reminder' ? () => setReminderDialogOpen(true)
+                            : undefined
+                          }
+                          component={action.href ? 'a' : 'button'}
+                          href={action.href}
+                          target={action.href ? '_blank' : undefined}
+                          rel={action.href ? 'noopener noreferrer' : undefined}
+                          sx={{ height: 40, fontSize: 12, borderColor: '#E3E1DA', color: '#1A1A18' }}
+                        >
+                          {action.label}
+                        </Button>
+                      </span>
+                    </Tooltip>
                   );
                   return <Grid item xs={6} sm={4} key={action.label}>{btn}</Grid>;
                 })}
@@ -392,6 +520,17 @@ export default function LeadDetailPage() {
         onClose={() => setStatusDialogOpen(false)}
         lead={lead}
         onSuccess={() => dispatch(fetchLeadById(id))}
+      />
+      <CreateEventDialog
+        open={scheduleDemoOpen}
+        onClose={() => { setScheduleDemoOpen(false); dispatch(fetchDemosByLead(id)); }}
+        prefillLeadId={Number(id)}
+      />
+      <EventDialog />
+      <SetReminderDialog
+        open={reminderDialogOpen}
+        onClose={() => setReminderDialogOpen(false)}
+        leadId={id}
       />
     </PageWrapper>
   );

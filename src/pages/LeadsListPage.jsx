@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -15,6 +15,16 @@ import {
   Pagination,
   IconButton,
   Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  CircularProgress,
+  Alert,
+  List,
+  ListItem,
+  ListItemText,
+  Divider,
 } from '@mui/material';
 import {
   AddOutlined,
@@ -22,7 +32,10 @@ import {
   RefreshOutlined,
   VisibilityOutlined,
   EditOutlined,
+  FileDownloadOutlined,
+  FileUploadOutlined,
 } from '@mui/icons-material';
+import toast from 'react-hot-toast';
 import { fetchLeads, setFilters, resetFilters, setPage } from '../features/leads/leadsSlice';
 import { useDebounce } from '../hooks/useDebounce';
 import DataTable from '../components/common/DataTable';
@@ -33,6 +46,8 @@ import ApiErrorAlert from '../components/common/ApiErrorAlert';
 import PageWrapper from '../components/common/PageWrapper';
 import { formatINR } from '../utils/formatCurrency';
 import { timeAgo } from '../utils/formatDate';
+import axiosInstance from '../api/axiosInstance';
+import { LEADS } from '../api/endpoints';
 
 const STATUSES = [
   'NEW','AI_CALL_SCHEDULED','AI_CALL_DONE_INTERESTED','AI_CALL_DONE_NOT_INTERESTED',
@@ -56,9 +71,78 @@ const COLUMNS = [
   { key: 'leadPriority', label: 'Priority', width: 80, align: 'center' },
   { key: 'estimatedDealValue', label: 'Deal Value', width: 110, align: 'right' },
   { key: 'assignedToName', label: 'Assigned To', width: 120 },
+  { key: 'createdAt', label: 'Created', width: 105 },
   { key: 'lastActivityAt', label: 'Last Activity', width: 100 },
   { key: '_actions', label: '', width: 70, align: 'right' },
 ];
+
+function ImportResultDialog({ open, result, onClose }) {
+  if (!result) return null;
+  const hasErrors = result.errors && result.errors.length > 0;
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ fontSize: 15, fontWeight: 700, pb: 1 }}>Import Result</DialogTitle>
+      <DialogContent sx={{ pt: '12px !important' }}>
+        <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+          <Box sx={{
+            flex: 1, background: '#F0F9F0', border: '1px solid #B5D98C',
+            borderRadius: '8px', p: 2, textAlign: 'center',
+          }}>
+            <Typography sx={{ fontSize: 28, fontWeight: 700, color: '#3B6D11', fontFamily: 'DM Mono' }}>
+              {result.successCount}
+            </Typography>
+            <Typography sx={{ fontSize: 12, color: '#3B6D11' }}>Leads Created</Typography>
+          </Box>
+          {result.failedCount > 0 && (
+            <Box sx={{
+              flex: 1, background: '#FEF2F2', border: '1px solid #FECACA',
+              borderRadius: '8px', p: 2, textAlign: 'center',
+            }}>
+              <Typography sx={{ fontSize: 28, fontWeight: 700, color: '#A32D2D', fontFamily: 'DM Mono' }}>
+                {result.failedCount}
+              </Typography>
+              <Typography sx={{ fontSize: 12, color: '#A32D2D' }}>Failed Rows</Typography>
+            </Box>
+          )}
+        </Box>
+        {hasErrors && (
+          <>
+            <Typography sx={{ fontSize: 12, fontWeight: 600, color: '#5A5A56', mb: 1 }}>
+              Errors ({result.errors.length}):
+            </Typography>
+            <Box sx={{
+              maxHeight: 200, overflowY: 'auto',
+              border: '1px solid #E3E1DA', borderRadius: '8px',
+              background: '#FAFAF8',
+            }}>
+              <List dense disablePadding>
+                {result.errors.map((err, i) => (
+                  <React.Fragment key={i}>
+                    <ListItem sx={{ py: 0.75, px: 1.5 }}>
+                      <ListItemText
+                        primary={err}
+                        primaryTypographyProps={{ fontSize: 11, color: '#A32D2D', fontFamily: 'DM Mono' }}
+                      />
+                    </ListItem>
+                    {i < result.errors.length - 1 && <Divider />}
+                  </React.Fragment>
+                ))}
+              </List>
+            </Box>
+          </>
+        )}
+        {!hasErrors && result.successCount > 0 && (
+          <Alert severity="success" sx={{ borderRadius: '8px', fontSize: 12 }}>
+            All rows imported successfully!
+          </Alert>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5 }}>
+        <Button onClick={onClose} variant="contained" size="small">Done</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
 
 export default function LeadsListPage() {
   const dispatch = useDispatch();
@@ -67,6 +151,11 @@ export default function LeadsListPage() {
 
   const [searchInput, setSearchInput] = useState(filters.search || '');
   const debouncedSearch = useDebounce(searchInput, 400);
+
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
+  const fileInputRef = useRef(null);
 
   const loadLeads = useCallback(() => {
     const params = {
@@ -92,6 +181,64 @@ export default function LeadsListPage() {
   const handleReset = () => { dispatch(resetFilters()); setSearchInput(''); };
   const handlePageChange = (_, page) => dispatch(setPage(page - 1));
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const params = {
+        ...(filters.status && { status: filters.status }),
+        ...(filters.city && { city: filters.city }),
+        ...(filters.assignedTo && { assignedTo: filters.assignedTo }),
+      };
+      const res = await axiosInstance.get(LEADS.EXPORT, {
+        params,
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(new Blob([res.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `leads_${new Date().toISOString().split('T')[0]}.xlsx`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      toast.success('Export downloaded');
+    } catch {
+      toast.error('Export failed');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleImportClick = () => fileInputRef.current?.click();
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset input so the same file can be re-selected after an error
+    e.target.value = '';
+
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+      toast.error('Please select an Excel file (.xlsx)');
+      return;
+    }
+
+    setImporting(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await axiosInstance.post(LEADS.IMPORT, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const result = res.data?.data;
+      setImportResult(result);
+      if (result?.successCount > 0) loadLeads();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Import failed');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const columns = COLUMNS.map((col) => ({
     ...col,
     render: (val, row) => {
@@ -108,6 +255,7 @@ export default function LeadsListPage() {
           {val ? formatINR(val) : '—'}
         </Typography>
       );
+      if (col.key === 'createdAt') return <Typography sx={{ fontSize: 11, color: '#5A5A56', fontFamily: 'DM Mono' }}>{val ? new Date(val).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</Typography>;
       if (col.key === 'lastActivityAt') return <Typography sx={{ fontSize: 11, color: '#5A5A56' }}>{val ? timeAgo(val) : '—'}</Typography>;
       if (col.key === '_actions') return (
         <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }} onClick={(e) => e.stopPropagation()}>
@@ -129,16 +277,52 @@ export default function LeadsListPage() {
 
   return (
     <PageWrapper title="All Leads">
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        style={{ display: 'none' }}
+        onChange={handleFileChange}
+      />
+
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography sx={{ fontSize: 18, fontWeight: 700 }}>All Leads</Typography>
-        <Button
-          variant="contained"
-          size="small"
-          startIcon={<AddOutlined />}
-          onClick={() => navigate('/leads/new')}
-        >
-          New Lead
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Tooltip title="Download import template / export current leads">
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={exporting ? <CircularProgress size={13} color="inherit" /> : <FileDownloadOutlined />}
+              onClick={handleExport}
+              disabled={exporting}
+              sx={{ height: 34, fontSize: 12, borderColor: '#E3E1DA', color: '#5A5A56' }}
+            >
+              Export
+            </Button>
+          </Tooltip>
+          <Tooltip title="Import leads from Excel (.xlsx)">
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={importing ? <CircularProgress size={13} color="inherit" /> : <FileUploadOutlined />}
+              onClick={handleImportClick}
+              disabled={importing}
+              sx={{ height: 34, fontSize: 12, borderColor: '#534AB7', color: '#534AB7' }}
+            >
+              Import
+            </Button>
+          </Tooltip>
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<AddOutlined />}
+            onClick={() => navigate('/leads/new')}
+            sx={{ height: 34 }}
+          >
+            New Lead
+          </Button>
+        </Box>
       </Box>
 
       {error && <ApiErrorAlert error={error} />}
@@ -223,6 +407,12 @@ export default function LeadsListPage() {
           </Box>
         )}
       </Card>
+
+      <ImportResultDialog
+        open={!!importResult}
+        result={importResult}
+        onClose={() => setImportResult(null)}
+      />
     </PageWrapper>
   );
 }

@@ -1,6 +1,10 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, Typography, Card, CardContent, Chip, CircularProgress } from '@mui/material';
+import {
+  Box, Typography, Card, CardContent, Chip, CircularProgress,
+  ToggleButton, ToggleButtonGroup, FormControl, InputLabel, Select, MenuItem, Button,
+} from '@mui/material';
+import { RefreshOutlined } from '@mui/icons-material';
 import GradeBadge from '../components/common/GradeBadge';
 import PriorityBadge from '../components/common/PriorityBadge';
 import PageWrapper from '../components/common/PageWrapper';
@@ -9,38 +13,65 @@ import axiosInstance from '../api/axiosInstance';
 import { LEADS } from '../api/endpoints';
 
 const PIPELINE_STAGES = [
-  { status: 'NEW', label: 'New', color: '#5A5A56' },
-  { status: 'IN_FOLLOW_UP', label: 'In Follow-up', color: '#185FA5' },
-  { status: 'DEMO_SCHEDULED', label: 'Demo Scheduled', color: '#0F6E56' },
-  { status: 'QUOTATION_SENT', label: 'Quotation Sent', color: '#BA7517' },
-  { status: 'NEGOTIATION', label: 'Negotiation', color: '#BA7517' },
-  { status: 'CONVERTED_WON', label: 'Converted / Won', color: '#3B6D11' },
+  { status: 'NEW',            label: 'New',             color: '#5A5A56' },
+  { status: 'IN_FOLLOW_UP',   label: 'In Follow-up',    color: '#185FA5' },
+  { status: 'DEMO_SCHEDULED', label: 'Demo Scheduled',  color: '#0F6E56' },
+  { status: 'DEMO_DONE',      label: 'Demo Done',       color: '#3B6D11' },
+  { status: 'QUOTATION_SENT', label: 'Quotation Sent',  color: '#BA7517' },
+  { status: 'NEGOTIATION',    label: 'Negotiation',     color: '#7A3F91' },
+  { status: 'CONVERTED_WON',  label: 'Converted / Won', color: '#3B6D11' },
 ];
 
-function LeadCard({ lead, onClick }) {
+function getDateRange(period) {
+  const today = new Date();
+  const fmt = (d) => d.toISOString().split('T')[0];
+  if (period === 'day') {
+    return { dateFrom: fmt(today), dateTo: fmt(today) };
+  }
+  if (period === 'week') {
+    const mon = new Date(today);
+    mon.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1));
+    return { dateFrom: fmt(mon), dateTo: fmt(today) };
+  }
+  if (period === 'month') {
+    const first = new Date(today.getFullYear(), today.getMonth(), 1);
+    return { dateFrom: fmt(first), dateTo: fmt(today) };
+  }
+  return {};
+}
+
+function LeadCard({ lead, stageColor, onClick }) {
   return (
     <Card
       onClick={() => onClick(lead)}
       sx={{
         mb: 1.5,
-        borderLeft: '3px solid',
-        borderLeftColor: 'inherit',
+        borderLeft: `3px solid ${stageColor}`,
         cursor: 'pointer',
-        '&:hover': { boxShadow: '0 2px 8px rgba(0,0,0,0.08)' },
+        boxShadow: 'none',
+        border: '1px solid #E3E1DA',
+        borderLeft: `3px solid ${stageColor}`,
+        '&:hover': { boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderColor: stageColor },
         borderRadius: '8px',
+        flexShrink: 0,
       }}
     >
-      <CardContent sx={{ p: '12px !important' }}>
-        <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.5, color: '#1A1A18' }}>
+      <CardContent sx={{ p: '10px 12px !important' }}>
+        <Typography sx={{ fontSize: 12, fontWeight: 600, mb: 0.25, color: '#1A1A18', lineHeight: 1.4 }}>
           {lead.companyName}
         </Typography>
-        <Typography sx={{ fontSize: 11, color: '#5A5A56', mb: 1 }}>
+        {lead.primaryContactName && (
+          <Typography sx={{ fontSize: 11, color: '#5A5A56', mb: 0.5 }}>
+            {lead.primaryContactName}
+          </Typography>
+        )}
+        <Typography sx={{ fontSize: 10, color: '#8A8A84', mb: 0.75 }}>
           {lead.city || '—'}
         </Typography>
         <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center', flexWrap: 'wrap' }}>
           <GradeBadge grade={lead.leadGrade} />
           <PriorityBadge priority={lead.leadPriority} />
-          {lead.estimatedDealValue && (
+          {lead.estimatedDealValue > 0 && (
             <Typography sx={{ fontSize: 10, fontFamily: 'DM Mono', color: '#3B6D11', ml: 'auto' }}>
               {formatLakh(lead.estimatedDealValue)}
             </Typography>
@@ -53,55 +84,155 @@ function LeadCard({ lead, onClick }) {
 
 export default function PipelinePage() {
   const navigate = useNavigate();
-  const [columns, setColumns] = React.useState({});
-  const [loading, setLoading] = React.useState(true);
+  const [columns, setColumns] = useState({});
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchAll = async () => {
-      setLoading(true);
-      const results = {};
-      await Promise.all(
-        PIPELINE_STAGES.map(async (stage) => {
-          try {
-            const response = await axiosInstance.get(LEADS.LIST, {
-              params: { status: stage.status, size: 50 },
-            });
-            const data = response.data.data;
-            results[stage.status] = Array.isArray(data) ? data : (data?.content || []);
-          } catch {
-            results[stage.status] = [];
-          }
-        })
-      );
-      setColumns(results);
-      setLoading(false);
-    };
-    fetchAll();
-  }, []);
+  const [period, setPeriod] = useState('all');
+  const [grade, setGrade] = useState('');
+  const [priority, setPriority] = useState('');
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    const dateParams = getDateRange(period);
+    const results = {};
+    await Promise.all(
+      PIPELINE_STAGES.map(async (stage) => {
+        try {
+          const res = await axiosInstance.get(LEADS.LIST, {
+            params: {
+              status: stage.status,
+              size: 100,
+              ...(grade    && { grade }),
+              ...(priority && { priority }),
+              ...dateParams,
+            },
+          });
+          const d = res.data?.data;
+          results[stage.status] = Array.isArray(d) ? d : (d?.content || []);
+        } catch {
+          results[stage.status] = [];
+        }
+      })
+    );
+    setColumns(results);
+    setLoading(false);
+  }, [period, grade, priority]);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  const totalLeads = PIPELINE_STAGES.reduce((s, st) => s + (columns[st.status]?.length || 0), 0);
+  const totalValue = PIPELINE_STAGES.reduce(
+    (s, st) => s + (columns[st.status] || []).reduce((a, l) => a + (l.estimatedDealValue || 0), 0), 0
+  );
 
   return (
     <PageWrapper title="Pipeline">
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2.5 }}>
-        <Typography sx={{ fontSize: 18, fontWeight: 700 }}>Pipeline</Typography>
+      {/* Header row */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1.5 }}>
+        <Box>
+          <Typography sx={{ fontSize: 18, fontWeight: 700, color: '#1A1A18' }}>Pipeline</Typography>
+          {!loading && (
+            <Typography sx={{ fontSize: 12, color: '#5A5A56', mt: 0.25 }}>
+              {totalLeads} leads · {formatLakh(totalValue)} total value
+            </Typography>
+          )}
+        </Box>
+
+        <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* Period toggle */}
+          <ToggleButtonGroup
+            value={period}
+            exclusive
+            onChange={(_, v) => { if (v) setPeriod(v); }}
+            size="small"
+            sx={{
+              '& .MuiToggleButton-root': {
+                fontSize: 11, fontWeight: 600, px: 1.5, py: 0.5, height: 32,
+                textTransform: 'none', border: '1px solid #E3E1DA', color: '#5A5A56',
+                '&.Mui-selected': { background: '#1A1A18', color: '#fff', borderColor: '#1A1A18' },
+              },
+            }}
+          >
+            <ToggleButton value="all">All</ToggleButton>
+            <ToggleButton value="month">Month</ToggleButton>
+            <ToggleButton value="week">Week</ToggleButton>
+            <ToggleButton value="day">Today</ToggleButton>
+          </ToggleButtonGroup>
+
+          {/* Grade filter */}
+          <FormControl size="small" sx={{ minWidth: 100 }}>
+            <InputLabel sx={{ fontSize: 12 }}>Grade</InputLabel>
+            <Select
+              label="Grade" value={grade}
+              onChange={e => setGrade(e.target.value)}
+              sx={{ fontSize: 12, height: 32 }}
+            >
+              <MenuItem value="" sx={{ fontSize: 12 }}>All</MenuItem>
+              {['A', 'B', 'C', 'D'].map(g => (
+                <MenuItem key={g} value={g} sx={{ fontSize: 12 }}>Grade {g}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          {/* Priority filter */}
+          <FormControl size="small" sx={{ minWidth: 110 }}>
+            <InputLabel sx={{ fontSize: 12 }}>Priority</InputLabel>
+            <Select
+              label="Priority" value={priority}
+              onChange={e => setPriority(e.target.value)}
+              sx={{ fontSize: 12, height: 32 }}
+            >
+              <MenuItem value="" sx={{ fontSize: 12 }}>All</MenuItem>
+              {['HOT', 'WARM', 'COLD'].map(p => (
+                <MenuItem key={p} value={p} sx={{ fontSize: 12 }}>{p}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <Button
+            size="small" variant="outlined"
+            startIcon={<RefreshOutlined sx={{ fontSize: 14 }} />}
+            onClick={fetchAll}
+            sx={{ height: 32, fontSize: 11, borderColor: '#E3E1DA', color: '#5A5A56', minWidth: 0, px: 1.5 }}
+          >
+            Refresh
+          </Button>
+        </Box>
       </Box>
 
+      {/* Board */}
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
           <CircularProgress />
         </Box>
       ) : (
-        <Box sx={{ display: 'flex', gap: 2, overflowX: 'auto', pb: 2, minHeight: 400 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            gap: 1.5,
+            overflowX: 'auto',
+            height: 'calc(100vh - 240px)',
+            pb: 1,
+          }}
+        >
           {PIPELINE_STAGES.map((stage) => {
             const leads = columns[stage.status] || [];
-            const totalValue = leads.reduce((sum, l) => sum + (l.estimatedDealValue || 0), 0);
+            const colValue = leads.reduce((s, l) => s + (l.estimatedDealValue || 0), 0);
+
             return (
               <Box
                 key={stage.status}
-                sx={{ minWidth: 240, flex: '0 0 240px' }}
+                sx={{
+                  flex: '0 0 230px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  minHeight: 0,
+                }}
               >
+                {/* Column header */}
                 <Box
                   sx={{
-                    p: 1.5,
+                    px: 1.5, py: 1,
                     background: '#F7F6F3',
                     border: '1px solid #E3E1DA',
                     borderRadius: '8px 8px 0 0',
@@ -109,65 +240,61 @@ export default function PipelinePage() {
                     display: 'flex',
                     alignItems: 'center',
                     gap: 1,
+                    flexShrink: 0,
                   }}
                 >
-                  <Box
-                    sx={{ width: 8, height: 8, borderRadius: '50%', background: stage.color, flexShrink: 0 }}
-                  />
-                  <Typography
-                    sx={{
-                      fontSize: 10,
-                      fontWeight: 700,
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.06em',
-                      color: '#1A1A18',
-                      flex: 1,
-                    }}
-                  >
+                  <Box sx={{ width: 7, height: 7, borderRadius: '50%', background: stage.color, flexShrink: 0 }} />
+                  <Typography sx={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#1A1A18', flex: 1 }}>
                     {stage.label}
                   </Typography>
-                  <Chip
-                    label={leads.length}
-                    size="small"
-                    sx={{ height: 18, fontSize: 10, fontFamily: 'DM Mono', background: '#E3E1DA' }}
-                  />
+                  <Chip label={leads.length} size="small"
+                    sx={{ height: 17, fontSize: 10, fontFamily: 'DM Mono', background: '#E3E1DA', '& .MuiChip-label': { px: 0.75 } }} />
                 </Box>
-                {totalValue > 0 && (
-                  <Box
-                    sx={{
-                      px: 1.5,
-                      py: 0.75,
-                      background: '#F7F6F3',
-                      border: '1px solid #E3E1DA',
-                      borderTop: '1px dashed #E3E1DA',
-                      borderBottom: 'none',
-                    }}
-                  >
+
+                {/* Deal value sub-header */}
+                {colValue > 0 && (
+                  <Box sx={{
+                    px: 1.5, py: 0.5,
+                    background: '#F7F6F3',
+                    border: '1px solid #E3E1DA',
+                    borderTop: '1px dashed #E3E1DA',
+                    borderBottom: 'none',
+                    flexShrink: 0,
+                  }}>
                     <Typography sx={{ fontSize: 10, fontFamily: 'DM Mono', color: '#3B6D11' }}>
-                      {formatLakh(totalValue)} total
+                      {formatLakh(colValue)} total
                     </Typography>
                   </Box>
                 )}
+
+                {/* Scrollable cards area */}
                 <Box
                   sx={{
+                    flex: 1,
+                    minHeight: 0,
+                    overflowY: 'auto',
                     border: '1px solid #E3E1DA',
                     borderTop: 'none',
                     borderRadius: '0 0 8px 8px',
                     background: '#FAFAF9',
-                    p: 1.5,
-                    minHeight: 300,
-                    sx: { borderLeft: `3px solid ${stage.color}` },
+                    p: 1.25,
+                    '&::-webkit-scrollbar': { width: 4 },
+                    '&::-webkit-scrollbar-thumb': { background: '#D5D2CA', borderRadius: 2 },
+                    '&::-webkit-scrollbar-track': { background: 'transparent' },
                   }}
                 >
                   {leads.length === 0 ? (
-                    <Typography sx={{ fontSize: 11, color: '#5A5A56', textAlign: 'center', pt: 4 }}>
+                    <Typography sx={{ fontSize: 11, color: '#AEADA6', textAlign: 'center', pt: 4 }}>
                       No leads
                     </Typography>
                   ) : (
                     leads.map((lead) => (
-                      <Box key={lead.id} sx={{ borderLeftColor: stage.color }}>
-                        <LeadCard lead={lead} onClick={(l) => navigate(`/leads/${l.id}`)} />
-                      </Box>
+                      <LeadCard
+                        key={lead.id}
+                        lead={lead}
+                        stageColor={stage.color}
+                        onClick={(l) => navigate(`/leads/${l.id}`)}
+                      />
                     ))
                   )}
                 </Box>
